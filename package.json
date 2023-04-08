@@ -7,7 +7,21 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "keywords": [],
+  "keywords": [
+    "Real-Time",
+    "Multi-User",
+    "State",
+    "Management",
+    "Collaborative",
+    "Web",
+    "Matt Hayes",
+    "Wizards of the Coast",
+    "OpenJS World",
+    "The Linux Foundation",
+    "Open Source Summit",
+    "North America",
+    "2023"
+  ],
   "author": "Matt Hayes <matt@mysterycommand.com>",
   "license": "MIT"
 }
