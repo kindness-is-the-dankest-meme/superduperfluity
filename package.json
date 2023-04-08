@@ -1,12 +1,13 @@
 {
   "name": "superduperfluity",
   "version": "1.0.0",
-  "description": "> Real-Time Multi-User State Management for the Collaborative Web",
-  "main": "index.js",
+  "description": "Real-Time Multi-User State Management for the Collaborative Web",
+  "private": true,
+  "type": "module",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
-  "author": "",
-  "license": "ISC"
+  "author": "Matt Hayes <matt@mysterycommand.com>",
+  "license": "MIT"
 }
