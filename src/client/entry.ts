@@ -1,4 +1,5 @@
 import { Evt } from "evt";
+
 import { negotiate } from "../shared";
 
 const createPeerConnection = () =>
@@ -28,19 +29,19 @@ const createWebSocket = (
   ];
 };
 
-const [webSocket, ready] = createWebSocket("ws://localhost:8080");
+const { hostname, protocol } = location;
+const [webSocket, ready] = createWebSocket(
+  `${protocol.replace("http", "ws")}//${hostname}:8080`
+);
 const peerConnection = createPeerConnection();
+negotiate([webSocket, ready], peerConnection, { RTCSessionDescription });
+
 const dataChannel = peerConnection.createDataChannel("superduperfluity");
 
-Evt.merge([
-  Evt.from<Event>(peerConnection, "connectionstatechange"),
-  Evt.from<Event>(peerConnection, "signalingstatechange"),
-]).attach((event) =>
-  console.log(
-    event.type,
-    peerConnection.signalingState,
-    peerConnection.connectionState
-  )
+Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) =>
+  console.log(JSON.parse(data))
 );
 
-negotiate([webSocket, ready], peerConnection);
+Evt.from<PointerEvent>(window, "pointermove").attach(({ x, y }) =>
+  dataChannel.send(JSON.stringify({ x, y }))
+);

@@ -9,7 +9,7 @@ const server = createServer();
 
 const socketServer = new WebSocketServer({ server });
 
-const { RTCPeerConnection } = wrtc;
+const { RTCPeerConnection, RTCSessionDescription, RTCDataChannelEvent } = wrtc;
 const createPeerConnection = () =>
   new RTCPeerConnection({
     iceServers: [
@@ -33,19 +33,19 @@ Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
   console.log("connection", readyState === OPEN ? "open" : "pending");
 
   const peerConnection = createPeerConnection();
+  negotiate([webSocket, ready], peerConnection, {
+    RTCSessionDescription,
+  });
 
-  Evt.merge([
-    Evt.from<Event>(peerConnection, "connectionstatechange"),
-    Evt.from<Event>(peerConnection, "signalingstatechange"),
-  ]).attach((event) =>
-    console.log(
-      event.type,
-      peerConnection.signalingState,
-      peerConnection.connectionState
-    )
+  Evt.from<RTCDataChannelEvent>(peerConnection, "datachannel").attach(
+    ({ channel }) => {
+      console.log("datachannel", channel.label);
+
+      Evt.from<MessageEvent>(channel, "message").attach(({ data }) =>
+        channel.send(JSON.stringify(data))
+      );
+    }
   );
-
-  negotiate([webSocket, ready], peerConnection);
 });
 
 server.listen(8080);

@@ -19,7 +19,12 @@ export interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
 
 export const negotiate = async (
   [webSocket, ready]: [WebSocketish, Promise<true>],
-  peerConnection: RTCPeerConnection
+  peerConnection: RTCPeerConnection,
+  {
+    RTCSessionDescription,
+  }: {
+    RTCSessionDescription: typeof globalThis.RTCSessionDescription;
+  }
 ) => {
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
@@ -36,7 +41,11 @@ export const negotiate = async (
     console.log("negotiationneeded");
 
     try {
-      await Promise.all([peerConnection.setLocalDescription(), ready]);
+      const offer = await peerConnection.createOffer();
+      await Promise.all([
+        peerConnection.setLocalDescription(new RTCSessionDescription(offer)),
+        ready,
+      ]);
 
       webSocket.send(
         JSON.stringify({ description: peerConnection.localDescription })
@@ -49,26 +58,60 @@ export const negotiate = async (
   Evt.from<RTCPeerConnectionIceEvent>(peerConnection, "icecandidate").attach(
     async ({ candidate }) => {
       console.log("icecandidate", { candidate });
+      if (candidate === null) return;
 
       await ready;
       webSocket.send(JSON.stringify({ candidate }));
     }
   );
 
-  // TODO: fix the types
-  Evt.from<MessageEvent>(webSocket, "message").attach(async ({ data }) => {
-    console.log("message", { data });
-
-    try {
-      const { candidate, description } = JSON.parse(data);
-
-      candidate && (await peerConnection.addIceCandidate(candidate));
-
-      description &&
-        description.type !== "offer" &&
-        (await peerConnection.setRemoteDescription(description));
-    } catch (error) {
-      console.error(error);
+  Evt.from<RTCPeerConnectionIceEvent>(
+    peerConnection,
+    "iceconnectionstatechange"
+  ).attach(() => {
+    console.log("iceconnectionstatechange", peerConnection.iceConnectionState);
+    if (peerConnection.iceConnectionState === "failed") {
+      peerConnection.restartIce();
     }
   });
+
+  // TODO: fix the types
+  Evt.from<MessageEvent>(webSocket, "message").attach(
+    async ({ type, data }) => {
+      console.log(
+        type,
+        peerConnection.signalingState,
+        peerConnection.connectionState
+      );
+
+      try {
+        const { candidate, description } = JSON.parse(data);
+        console.log({ candidate, description });
+
+        if (candidate) {
+          await peerConnection.addIceCandidate(candidate);
+        }
+
+        if (description) {
+          await peerConnection.setRemoteDescription(description);
+
+          if (description.type === "offer") {
+            const answer = await peerConnection.createAnswer();
+            await Promise.all([
+              peerConnection.setLocalDescription(
+                new RTCSessionDescription(answer)
+              ),
+              ready,
+            ]);
+
+            webSocket.send(
+              JSON.stringify({ description: peerConnection.localDescription })
+            );
+          }
+        }
+      } catch (error) {
+        console.error(error);
+      }
+    }
+  );
 };
