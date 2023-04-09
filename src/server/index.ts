@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import wrtc from "wrtc";
 import { WebSocket, WebSocketServer } from "ws";
 
-import { negotiate, type WebSocketish } from "../shared/index.js";
+import { negotiate } from "../shared/index.js";
 
 const server = createServer();
 
