@@ -11,7 +11,13 @@ export const negotiate = async (
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
     Evt.from<Event>(peerConnection, "signallingstatechange"),
-  ]).attach((event) => console.log(event.type));
+  ]).attach((event) =>
+    console.log(
+      event.type,
+      peerConnection.signalingState,
+      peerConnection.connectionState
+    )
+  );
 
   Evt.from<Event>(peerConnection, "negotiationneeded").attach(async () => {
     console.log("negotiationneeded");
@@ -32,7 +38,7 @@ export const negotiate = async (
 
   Evt.from<RTCPeerConnectionIceEvent>(peerConnection, "icecandidate").attach(
     async ({ candidate }) => {
-      console.log({ candidate });
+      console.log("icecandidate", { candidate });
 
       await isReady(webSocket);
       webSocket.send(JSON.stringify({ candidate }));
@@ -42,7 +48,7 @@ export const negotiate = async (
   // TODO: fix the types
   Evt.from<MessageEvent>(webSocket as any, "message").attach(
     async ({ data }) => {
-      console.log(data);
+      console.log("message", { data });
 
       try {
         const { candidate, description } = JSON.parse(data);

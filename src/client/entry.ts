@@ -29,9 +29,12 @@ const dataChannel = peerConnection.createDataChannel("superduperfluity");
 Evt.merge([
   Evt.from<Event>(peerConnection, "connectionstatechange"),
   Evt.from<Event>(peerConnection, "signalingstatechange"),
-]).attach(() => {
-  console.log("connectionState", peerConnection.connectionState);
-  console.log("signalingState", peerConnection.signalingState);
-});
+]).attach((event) =>
+  console.log(
+    event.type,
+    peerConnection.signalingState,
+    peerConnection.connectionState
+  )
+);
 
 negotiate(webSocket, peerConnection, isReady);

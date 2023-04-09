@@ -30,14 +30,23 @@ const isReady = (webSocket: any): Promise<void> =>
       ? resolve()
       : Evt.from<Event>(webSocket, "open").attachOnce(() => resolve())
   );
+
 Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
   console.log("connection");
   const peerConnection = createPeerConnection();
-  negotiate(webSocket, peerConnection, isReady);
 
-  // Evt.from<MessageEvent>(webSocket, "message").attach(({ data }) =>
-  //   console.log(data)
-  // );
+  Evt.merge([
+    Evt.from<Event>(peerConnection, "connectionstatechange"),
+    Evt.from<Event>(peerConnection, "signalingstatechange"),
+  ]).attach((event) =>
+    console.log(
+      event.type,
+      peerConnection.signalingState,
+      peerConnection.connectionState
+    )
+  );
+
+  negotiate(webSocket, peerConnection, isReady);
 });
 
 server.listen(8080);
