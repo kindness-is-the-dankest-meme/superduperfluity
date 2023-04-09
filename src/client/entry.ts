@@ -1,5 +1,5 @@
 import { Evt } from "evt";
-import { negotiate, type WebSocketish } from "../shared";
+import { negotiate } from "../shared";
 
 const createPeerConnection = () =>
   new RTCPeerConnection({
