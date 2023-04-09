@@ -1,12 +1,25 @@
 import { Evt } from "evt";
-import type { WebSocket as ServerWebSocket } from "ws";
 
-type MinWebSocket = WebSocket | ServerWebSocket;
+interface WebSocketishEventMap {
+  message: Pick<MessageEvent, "data" | "type">;
+  open: Pick<Event, "type">;
+}
+
+export interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
+  send(data: string): void;
+  addEventListener<K extends keyof WebSocketishEventMap>(
+    type: K,
+    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
+  ): void;
+  removeEventListener<K extends keyof WebSocketishEventMap>(
+    type: K,
+    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
+  ): void;
+}
 
 export const negotiate = async (
-  webSocket: any,
-  peerConnection: RTCPeerConnection,
-  isReady: (webSocket: MinWebSocket) => Promise<void>
+  [webSocket, ready]: [WebSocketish, Promise<true>],
+  peerConnection: RTCPeerConnection
 ) => {
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
@@ -23,10 +36,7 @@ export const negotiate = async (
     console.log("negotiationneeded");
 
     try {
-      await Promise.all([
-        peerConnection.setLocalDescription(),
-        isReady(webSocket),
-      ]);
+      await Promise.all([peerConnection.setLocalDescription(), ready]);
 
       webSocket.send(
         JSON.stringify({ description: peerConnection.localDescription })
@@ -40,27 +50,25 @@ export const negotiate = async (
     async ({ candidate }) => {
       console.log("icecandidate", { candidate });
 
-      await isReady(webSocket);
+      await ready;
       webSocket.send(JSON.stringify({ candidate }));
     }
   );
 
   // TODO: fix the types
-  Evt.from<MessageEvent>(webSocket as any, "message").attach(
-    async ({ data }) => {
-      console.log("message", { data });
+  Evt.from<MessageEvent>(webSocket, "message").attach(async ({ data }) => {
+    console.log("message", { data });
 
-      try {
-        const { candidate, description } = JSON.parse(data);
+    try {
+      const { candidate, description } = JSON.parse(data);
 
-        candidate && (await peerConnection.addIceCandidate(candidate));
+      candidate && (await peerConnection.addIceCandidate(candidate));
 
-        description &&
-          description.type !== "offer" &&
-          (await peerConnection.setRemoteDescription(description));
-      } catch (error) {
-        console.error(error);
-      }
+      description &&
+        description.type !== "offer" &&
+        (await peerConnection.setRemoteDescription(description));
+    } catch (error) {
+      console.error(error);
     }
-  );
+  });
 };

@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import wrtc from "wrtc";
 import { WebSocket, WebSocketServer } from "ws";
 
-import { negotiate } from "../shared/index.js";
+import { negotiate, type WebSocketish } from "../shared/index.js";
 
 const server = createServer();
 
@@ -22,17 +22,16 @@ const createPeerConnection = () =>
     ],
   });
 
-type MinWebSocket = Pick<WebSocket, "readyState" | "OPEN">;
-const isOpen = ({ readyState }: MinWebSocket) => readyState === WebSocket.OPEN;
-const isReady = (webSocket: any): Promise<void> =>
-  new Promise((resolve) =>
-    isOpen(webSocket)
-      ? resolve()
-      : Evt.from<Event>(webSocket, "open").attachOnce(() => resolve())
+Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
+  const { readyState, OPEN } = webSocket;
+  const ready = new Promise<true>((resolve) =>
+    readyState !== OPEN
+      ? Evt.from<Event>(webSocket, "open").attachOnce(() => resolve(true))
+      : resolve(true)
   );
 
-Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
-  console.log("connection");
+  console.log("connection", readyState === OPEN ? "open" : "pending");
+
   const peerConnection = createPeerConnection();
 
   Evt.merge([
@@ -46,7 +45,7 @@ Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
     )
   );
 
-  negotiate(webSocket, peerConnection, isReady);
+  negotiate([webSocket, ready], peerConnection);
 });
 
 server.listen(8080);

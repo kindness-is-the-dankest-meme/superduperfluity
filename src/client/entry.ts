@@ -1,5 +1,5 @@
 import { Evt } from "evt";
-import { negotiate } from "../shared";
+import { negotiate, type WebSocketish } from "../shared";
 
 const createPeerConnection = () =>
   new RTCPeerConnection({
@@ -13,16 +13,22 @@ const createPeerConnection = () =>
     ],
   });
 
-type MinWebSocket = Pick<WebSocket, "readyState" | "OPEN">;
-const isOpen = ({ readyState }: MinWebSocket) => readyState === WebSocket.OPEN;
-const isReady = (webSocket: any): Promise<void> =>
-  new Promise((resolve) =>
-    isOpen(webSocket)
-      ? resolve()
-      : Evt.from<Event>(webSocket, "open").attachOnce(() => resolve())
-  );
+const createWebSocket = (
+  ...args: ConstructorParameters<typeof WebSocket>
+): [WebSocket, Promise<true>] => {
+  const webSocket = new WebSocket(...args);
+  const { readyState, OPEN } = webSocket;
+  return [
+    webSocket,
+    new Promise<true>((resolve) =>
+      readyState !== OPEN
+        ? Evt.from<Event>(webSocket, "open").attachOnce(() => resolve(true))
+        : resolve(true)
+    ),
+  ];
+};
 
-const webSocket = new WebSocket("ws://localhost:8080");
+const [webSocket, ready] = createWebSocket("ws://localhost:8080");
 const peerConnection = createPeerConnection();
 const dataChannel = peerConnection.createDataChannel("superduperfluity");
 
@@ -37,4 +43,4 @@ Evt.merge([
   )
 );
 
-negotiate(webSocket, peerConnection, isReady);
+negotiate([webSocket, ready], peerConnection);
