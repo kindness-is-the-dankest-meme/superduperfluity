@@ -32,7 +32,9 @@ const createWebSocket = (
 
 const { hostname, protocol } = location;
 const [webSocket, ready] = createWebSocket(
-  `${protocol.replace("http", "ws")}//${hostname}:8080`
+  `${protocol.replace("http", "ws")}//${hostname}${
+    process.env.NODE_ENV === "production" ? "/wrtc" : ":8080"
+  }`
 );
 const peerConnection = createPeerConnection();
 negotiate([webSocket, ready], peerConnection, { RTCSessionDescription });
