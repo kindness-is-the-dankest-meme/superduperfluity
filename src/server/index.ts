@@ -3,10 +3,9 @@ import { createServer } from "node:http";
 import wrtc from "wrtc";
 import { WebSocket, WebSocketServer } from "ws";
 
-import { negotiate } from "../shared/index.js";
+import { negotiate } from "../shared/negotiate.js";
 
 const server = createServer();
-
 const socketServer = new WebSocketServer({ server });
 
 const { RTCPeerConnection, RTCSessionDescription } = wrtc;
@@ -22,6 +21,7 @@ const createPeerConnection = () =>
     ],
   });
 
+const channels = new Map<string, RTCDataChannel>();
 Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
   const { readyState, OPEN } = webSocket;
   const ready = new Promise<true>((resolve) =>
@@ -40,9 +40,10 @@ Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
   Evt.from<RTCDataChannelEvent>(peerConnection, "datachannel").attach(
     ({ channel }) => {
       console.log("datachannel", channel.label);
+      channels.set(channel.label, channel);
 
       Evt.from<MessageEvent>(channel, "message").attach(({ data }) =>
-        channel.send(JSON.stringify(data))
+        channels.forEach((c) => c.label !== channel.label && c.send(data))
       );
     }
   );

@@ -5,7 +5,7 @@ interface WebSocketishEventMap {
   open: Pick<Event, "type">;
 }
 
-export interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
+interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
   send(data: string): void;
   addEventListener<K extends keyof WebSocketishEventMap>(
     type: K,
