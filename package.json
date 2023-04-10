@@ -4,12 +4,26 @@
   "description": "Real-Time Multi-User State Management for the Collaborative Web",
   "private": true,
   "type": "module",
+  "targets": {
+    "client": {
+      "source": "src/client/index.html",
+      "distDir": "dist/client"
+    }
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev:client": "parcel src/client/index.html",
+    "dev:client": "parcel --target client",
     "dev:server-watch": "tsc -b --watch --preserveWatchOutput",
     "dev:server-restart": "nodemon dist/server/index.js",
-    "dev": "concurrently \"npm:dev:*\""
+    "dev": "concurrently \"npm:dev:*\"",
+    "build:client": "parcel build --target client",
+    "build:server": "tsc -b",
+    "build": "concurrently \"npm:build:*\"",
+    "start": "node dist/server/index.js",
+    "preview:client": "serve dist/client",
+    "preview:server": "npm start",
+    "preview": "concurrently \"npm:preview:*\"",
+    "prepreview": "npm run build"
   },
   "keywords": [
     "Real-Time",
@@ -44,6 +58,7 @@
     "process": "^0.11.10",
     "punycode": "^1.4.1",
     "querystring-es3": "^0.2.1",
+    "serve": "^14.2.0",
     "stream-http": "^3.2.0",
     "typescript": "^5.0.4",
     "url": "^0.11.0"
