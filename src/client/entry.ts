@@ -36,7 +36,10 @@ const [webSocket, ready] = createWebSocket(
 const peerConnection = createPeerConnection();
 negotiate([webSocket, ready], peerConnection, { RTCSessionDescription });
 
-const dataChannel = peerConnection.createDataChannel("superduperfluity");
+const dataChannel = peerConnection.createDataChannel("superduperfluity", {
+  ordered: false,
+  maxRetransmits: 0,
+});
 
 Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) =>
   console.log(JSON.parse(data))
