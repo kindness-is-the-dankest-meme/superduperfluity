@@ -9,7 +9,7 @@ const server = createServer();
 
 const socketServer = new WebSocketServer({ server });
 
-const { RTCPeerConnection, RTCSessionDescription, RTCDataChannelEvent } = wrtc;
+const { RTCPeerConnection, RTCSessionDescription } = wrtc;
 const createPeerConnection = () =>
   new RTCPeerConnection({
     iceServers: [
