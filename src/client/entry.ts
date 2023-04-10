@@ -45,50 +45,60 @@ const dataChannel = peerConnection.createDataChannel(localId, {
   maxRetransmits: 0,
 });
 
-const pointers = new Map<string, { x: number; y: number }>();
-Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) => {
-  const { id, x, y } = JSON.parse(data);
-  pointers.set(id, { x, y });
-  console.log({ id, x, y });
+Evt.merge([
+  Evt.from<Event>(dataChannel, "error"),
+  Evt.from<Event>(dataChannel, "close"),
+]).attach(({ type }) => {
+  console.log("dataChannel", type);
+  // negotiate again?
 });
 
-Evt.from<PointerEvent>(window, "pointermove").attach(({ x, y }) => {
-  dataChannel.send(JSON.stringify({ id: localId, x, y }));
-  pointers.set(localId, { x, y });
-});
-
-const { requestAnimationFrame: raf } = window;
-const { PI: π } = Math;
-const ππ = π * 2;
-
-const throwError = (message: string) => {
-  throw new Error(message);
-};
-
-const el = <T extends Element>(selector: string) =>
-  document.querySelector<T>(selector) ??
-  throwError(`No element found for selector: ${selector}`);
-
-const canvas = el<HTMLCanvasElement>("canvas");
-const ctx = canvas.getContext("2d") ?? throwError("No canvas context");
-
-Evt.from<UIEvent>(window, "resize").attach(() => {
-  const { innerWidth, innerHeight } = window;
-  canvas.width = innerWidth;
-  canvas.height = innerHeight;
-});
-window.dispatchEvent(new UIEvent("resize"));
-
-const draw = () => {
-  raf(draw);
-
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
-  pointers.forEach(({ x, y }, id) => {
-    ctx.beginPath();
-    ctx.ellipse(x, y, 10, 10, 0, 0, ππ);
-    ctx.fillStyle = `#${id}`;
-    ctx.fill();
+Evt.from<Event>(dataChannel, "open").attach(() => {
+  const pointers = new Map<string, { x: number; y: number }>();
+  Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) => {
+    const { id, x, y } = JSON.parse(data);
+    pointers.set(id, { x, y });
+    console.log({ id, x, y });
   });
-};
 
-raf(draw);
+  Evt.from<PointerEvent>(window, "pointermove").attach(({ x, y }) => {
+    dataChannel.send(JSON.stringify({ id: localId, x, y }));
+    pointers.set(localId, { x, y });
+  });
+
+  const { requestAnimationFrame: raf } = window;
+  const { PI: π } = Math;
+  const ππ = π * 2;
+
+  const throwError = (message: string) => {
+    throw new Error(message);
+  };
+
+  const el = <T extends Element>(selector: string) =>
+    document.querySelector<T>(selector) ??
+    throwError(`No element found for selector: ${selector}`);
+
+  const canvas = el<HTMLCanvasElement>("canvas");
+  const ctx = canvas.getContext("2d") ?? throwError("No canvas context");
+
+  Evt.from<UIEvent>(window, "resize").attach(() => {
+    const { innerWidth, innerHeight } = window;
+    canvas.width = innerWidth;
+    canvas.height = innerHeight;
+  });
+  window.dispatchEvent(new UIEvent("resize"));
+
+  const draw = () => {
+    raf(draw);
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    pointers.forEach(({ x, y }, id) => {
+      ctx.beginPath();
+      ctx.ellipse(x, y, 10, 10, 0, 0, ππ);
+      ctx.fillStyle = `#${id}`;
+      ctx.fill();
+    });
+  };
+
+  raf(draw);
+});
