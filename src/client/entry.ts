@@ -1,7 +1,7 @@
 import { Evt } from "evt";
 
 import { negotiate } from "../shared/negotiate";
-import { randomHex } from "../shared/randomHex";
+import { randomHex } from "./randomHex";
 
 const createPeerConnection = () =>
   new RTCPeerConnection({
