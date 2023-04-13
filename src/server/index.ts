@@ -14,6 +14,7 @@ const { RTCPeerConnection, RTCSessionDescription } = wrtc;
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
 const channels = new Map<string, RTCDataChannel>();
+
 Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
   console.log("connection");
 
@@ -26,8 +27,8 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
   Evt.from<RTCDataChannelEvent>(peerConnection, "datachannel").attach(
     ({ channel }) => {
       console.log("datachannel", channel.label);
-      channels.set(channel.label, channel);
 
+      channels.set(channel.label, channel);
       Evt.from<MessageEvent>(channel, "message").attach(({ data }) =>
         channels.forEach((c) => c.label !== channel.label && c.send(data))
       );

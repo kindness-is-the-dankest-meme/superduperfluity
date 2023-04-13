@@ -7,27 +7,19 @@ import { randomHex } from "./randomHex";
 
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
-class SignallingSocket extends WebSocket {
-  async send(
-    data: string | ArrayBufferLike | Blob | ArrayBufferView
-  ): Promise<void> {
-    await isOpen(this);
-    super.send(data);
-  }
-}
-
-const createSignallingSocket = (
-  ...args: ConstructorParameters<typeof WebSocket>
-) => new SignallingSocket(...args);
+const createWebSocket = (...args: ConstructorParameters<typeof webSocket>) =>
+  new webSocket(...args);
 
 const { hostname, protocol } = location;
-const signallingSocket = createSignallingSocket(
+const webSocket = createWebSocket(
   `${protocol.replace("http", "ws")}//${hostname}${
     process.env.NODE_ENV === "production" ? "/wrtc" : ":8080"
   }`
 );
+
+await isOpen(webSocket);
 const peerConnection = createPeerConnection();
-negotiate(signallingSocket, peerConnection, { RTCSessionDescription });
+negotiate(webSocket, peerConnection, { RTCSessionDescription });
 
 const localId = randomHex();
 const dataChannel = peerConnection.createDataChannel(localId, {
@@ -92,3 +84,17 @@ Evt.from<Event>(dataChannel, "open").attach(() => {
 
   raf(draw);
 });
+
+/**
+ * - send input to data channel
+ * - send input to state (predictions)
+ * - input *from* data channel is "known good"
+ *   - current state is last known good state + known good input + predictions
+ *   - known good input that *is* a predicion drops the prediction
+ *   - invalid predictions are dropped during replay
+ *
+ * input messages have:
+ *   - timestamp
+ *   - input id
+ *   - client id
+ */
