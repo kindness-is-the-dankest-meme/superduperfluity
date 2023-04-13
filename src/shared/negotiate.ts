@@ -1,26 +1,10 @@
 import { Evt } from "evt";
-
-interface WebSocketishEventMap {
-  message: Pick<MessageEvent, "data" | "type">;
-  open: Pick<Event, "type">;
-}
-
-interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
-  send(data: string): void;
-  addEventListener<K extends keyof WebSocketishEventMap>(
-    type: K,
-    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
-  ): void;
-  removeEventListener<K extends keyof WebSocketishEventMap>(
-    type: K,
-    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
-  ): void;
-}
+import type { WebSocketish } from "./types.js";
 
 const isPolite = "process" in globalThis;
 
 export const negotiate = async (
-  [webSocket, ready]: [WebSocketish, Promise<true>],
+  webSocket: WebSocketish,
   peerConnection: RTCPeerConnection,
   {
     RTCSessionDescription,
@@ -48,10 +32,9 @@ export const negotiate = async (
       isOffering = true;
 
       const offer = await peerConnection.createOffer();
-      await Promise.all([
-        peerConnection.setLocalDescription(new RTCSessionDescription(offer)),
-        ready,
-      ]);
+      await peerConnection.setLocalDescription(
+        new RTCSessionDescription(offer)
+      );
 
       webSocket.send(
         JSON.stringify({ description: peerConnection.localDescription })
@@ -68,7 +51,6 @@ export const negotiate = async (
       console.log("icecandidate", { candidate });
       if (candidate === null) return;
 
-      await ready;
       webSocket.send(JSON.stringify({ candidate }));
     }
   );
@@ -111,12 +93,9 @@ export const negotiate = async (
             }
 
             const answer = await peerConnection.createAnswer();
-            await Promise.all([
-              peerConnection.setLocalDescription(
-                new RTCSessionDescription(answer)
-              ),
-              ready,
-            ]);
+            await peerConnection.setLocalDescription(
+              new RTCSessionDescription(answer)
+            );
 
             webSocket.send(
               JSON.stringify({ description: peerConnection.localDescription })

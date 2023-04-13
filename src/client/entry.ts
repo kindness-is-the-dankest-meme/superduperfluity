@@ -1,43 +1,33 @@
 import { Evt } from "evt";
 
+import { isOpen } from "../shared/isOpen";
 import { negotiate } from "../shared/negotiate";
+import { rtcConfiguration } from "../shared/rtcConfiguration";
 import { randomHex } from "./randomHex";
 
-const createPeerConnection = () =>
-  new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: [
-          "stun:stun.l.google.com:19302",
-          "stun:global.stun.twilio.com:3478",
-        ],
-      },
-    ],
-  });
+const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
-const createWebSocket = (
+class SignallingSocket extends WebSocket {
+  async send(
+    data: string | ArrayBufferLike | Blob | ArrayBufferView
+  ): Promise<void> {
+    await isOpen(this);
+    super.send(data);
+  }
+}
+
+const createSignallingSocket = (
   ...args: ConstructorParameters<typeof WebSocket>
-): [WebSocket, Promise<true>] => {
-  const webSocket = new WebSocket(...args);
-  const { readyState, OPEN } = webSocket;
-  return [
-    webSocket,
-    new Promise<true>((resolve) =>
-      readyState !== OPEN
-        ? Evt.from<Event>(webSocket, "open").attachOnce(() => resolve(true))
-        : resolve(true)
-    ),
-  ];
-};
+) => new SignallingSocket(...args);
 
 const { hostname, protocol } = location;
-const [webSocket, ready] = createWebSocket(
+const signallingSocket = createSignallingSocket(
   `${protocol.replace("http", "ws")}//${hostname}${
     process.env.NODE_ENV === "production" ? "/wrtc" : ":8080"
   }`
 );
 const peerConnection = createPeerConnection();
-negotiate([webSocket, ready], peerConnection, { RTCSessionDescription });
+negotiate(signallingSocket, peerConnection, { RTCSessionDescription });
 
 const localId = randomHex();
 const dataChannel = peerConnection.createDataChannel(localId, {

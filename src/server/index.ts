@@ -3,37 +3,23 @@ import { createServer } from "node:http";
 import wrtc from "wrtc";
 import { WebSocket, WebSocketServer } from "ws";
 
+import { isOpen } from "../shared/isOpen.js";
 import { negotiate } from "../shared/negotiate.js";
+import { rtcConfiguration } from "../shared/rtcConfiguration.js";
 
 const server = createServer();
 const socketServer = new WebSocketServer({ server });
 
 const { RTCPeerConnection, RTCSessionDescription } = wrtc;
-const createPeerConnection = () =>
-  new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: [
-          "stun:stun.l.google.com:19302",
-          "stun:global.stun.twilio.com:3478",
-        ],
-      },
-    ],
-  });
+const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
 const channels = new Map<string, RTCDataChannel>();
-Evt.from<WebSocket>(socketServer, "connection").attach((webSocket) => {
-  const { readyState, OPEN } = webSocket;
-  const ready = new Promise<true>((resolve) =>
-    readyState !== OPEN
-      ? Evt.from<Event>(webSocket, "open").attachOnce(() => resolve(true))
-      : resolve(true)
-  );
+Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
+  console.log("connection");
 
-  console.log("connection", readyState === OPEN ? "open" : "pending");
-
+  await isOpen(webSocket);
   const peerConnection = createPeerConnection();
-  negotiate([webSocket, ready], peerConnection, {
+  negotiate(webSocket, peerConnection, {
     RTCSessionDescription,
   });
 
