@@ -17,6 +17,8 @@ interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
   ): void;
 }
 
+const isPolite = "process" in globalThis;
+
 export const negotiate = async (
   [webSocket, ready]: [WebSocketish, Promise<true>],
   peerConnection: RTCPeerConnection,
@@ -26,6 +28,8 @@ export const negotiate = async (
     RTCSessionDescription: typeof globalThis.RTCSessionDescription;
   }
 ) => {
+  let isOffering = false;
+
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
     Evt.from<Event>(peerConnection, "signallingstatechange"),
@@ -41,6 +45,8 @@ export const negotiate = async (
     console.log("negotiationneeded");
 
     try {
+      isOffering = true;
+
       const offer = await peerConnection.createOffer();
       await Promise.all([
         peerConnection.setLocalDescription(new RTCSessionDescription(offer)),
@@ -52,6 +58,8 @@ export const negotiate = async (
       );
     } catch (error) {
       console.error(error);
+    } finally {
+      isOffering = false;
     }
   });
 
@@ -75,7 +83,6 @@ export const negotiate = async (
     }
   });
 
-  // TODO: fix the types
   Evt.from<MessageEvent>(webSocket, "message").attach(
     async ({ type, data }) => {
       console.log(
@@ -96,6 +103,13 @@ export const negotiate = async (
           await peerConnection.setRemoteDescription(description);
 
           if (description.type === "offer") {
+            if (
+              !isPolite &&
+              (isOffering || peerConnection.signalingState !== "stable")
+            ) {
+              return;
+            }
+
             const answer = await peerConnection.createAnswer();
             await Promise.all([
               peerConnection.setLocalDescription(
