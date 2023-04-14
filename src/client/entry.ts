@@ -3,12 +3,20 @@ import { Evt } from "evt";
 import { isOpen } from "../shared/isOpen";
 import { negotiate } from "../shared/negotiate";
 import { rtcConfiguration } from "../shared/rtcConfiguration";
+import { store } from "../shared/state";
 import { randomHex } from "./randomHex";
 
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
-const createWebSocket = (...args: ConstructorParameters<typeof webSocket>) =>
-  new webSocket(...args);
+class SignalingSocket extends WebSocket {
+  async send(data: Parameters<WebSocket["send"]>["0"]) {
+    await isOpen(this);
+    super.send(data);
+  }
+}
+
+const createWebSocket = (...args: ConstructorParameters<typeof WebSocket>) =>
+  new SignalingSocket(...args);
 
 const { hostname, protocol } = location;
 const webSocket = createWebSocket(
@@ -17,7 +25,6 @@ const webSocket = createWebSocket(
   }`
 );
 
-await isOpen(webSocket);
 const peerConnection = createPeerConnection();
 negotiate(webSocket, peerConnection, { RTCSessionDescription });
 
