@@ -1,7 +1,6 @@
 import { Evt } from "evt";
+import { isServer } from "./constants.js";
 import type { WebSocketish } from "./types.js";
-
-const isPolite = "process" in globalThis;
 
 export const negotiate = async (
   webSocket: WebSocketish,
@@ -86,7 +85,7 @@ export const negotiate = async (
 
           if (description.type === "offer") {
             if (
-              !isPolite &&
+              !isServer &&
               (isOffering || peerConnection.signalingState !== "stable")
             ) {
               return;
