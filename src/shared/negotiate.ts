@@ -1,6 +1,8 @@
 import { Evt } from "evt";
-import { isServer } from "./constants.js";
 import type { WebSocketish } from "./types.js";
+
+const isServer = "process" in globalThis;
+const isDebug = false;
 
 export const negotiate = async (
   webSocket: WebSocketish,
@@ -16,16 +18,18 @@ export const negotiate = async (
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
     Evt.from<Event>(peerConnection, "signallingstatechange"),
-  ]).attach((event) =>
-    console.log(
-      event.type,
-      peerConnection.signalingState,
-      peerConnection.connectionState
-    )
+  ]).attach(
+    (event) =>
+      isDebug &&
+      console.log(
+        event.type,
+        peerConnection.signalingState,
+        peerConnection.connectionState
+      )
   );
 
   Evt.from<Event>(peerConnection, "negotiationneeded").attach(async () => {
-    console.log("negotiationneeded");
+    isDebug && console.log("negotiationneeded");
 
     try {
       isOffering = true;
@@ -47,7 +51,7 @@ export const negotiate = async (
 
   Evt.from<RTCPeerConnectionIceEvent>(peerConnection, "icecandidate").attach(
     async ({ candidate }) => {
-      console.log("icecandidate", { candidate });
+      isDebug && console.log("icecandidate", { candidate });
       if (candidate === null) return;
 
       webSocket.send(JSON.stringify({ candidate }));
@@ -58,7 +62,12 @@ export const negotiate = async (
     peerConnection,
     "iceconnectionstatechange"
   ).attach(() => {
-    console.log("iceconnectionstatechange", peerConnection.iceConnectionState);
+    isDebug &&
+      console.log(
+        "iceconnectionstatechange",
+        peerConnection.iceConnectionState
+      );
+
     if (peerConnection.iceConnectionState === "failed") {
       peerConnection.restartIce();
     }
@@ -66,15 +75,16 @@ export const negotiate = async (
 
   Evt.from<MessageEvent>(webSocket, "message").attach(
     async ({ type, data }) => {
-      console.log(
-        type,
-        peerConnection.signalingState,
-        peerConnection.connectionState
-      );
+      isDebug &&
+        console.log(
+          type,
+          peerConnection.signalingState,
+          peerConnection.connectionState
+        );
 
       try {
         const { candidate, description } = JSON.parse(data);
-        console.log({ candidate, description });
+        isDebug && console.log({ candidate, description });
 
         if (candidate) {
           await peerConnection.addIceCandidate(candidate);
