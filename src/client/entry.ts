@@ -111,4 +111,9 @@ Evt.from<Event>(dataChannelCtx, dataChannel, "open").attach(() => {
  *   - timestamp
  *   - input id
  *   - client id
+ *
+ * - add a reliable sync channel
+ * - send initial state on open
+ * - trigger sync on desync
+ *   - naive: client request on skipped action ids
  */
