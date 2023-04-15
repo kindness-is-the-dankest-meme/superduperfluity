@@ -14,7 +14,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev:client": "parcel --target client",
     "dev:server-watch": "tsc -b --watch --preserveWatchOutput",
-    "dev:server-restart": "nodemon dist/server/index.js",
+    "dev:server-restart": "nodemon",
     "dev": "concurrently \"npm:dev:*\"",
     "build:client": "parcel build --target client",
     "build:server": "tsc -b",
