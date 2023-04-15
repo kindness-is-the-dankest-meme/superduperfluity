@@ -3,7 +3,7 @@ import { Evt } from "evt";
 import { isOpen } from "../shared/isOpen";
 import { negotiate } from "../shared/negotiate";
 import { rtcConfiguration } from "../shared/rtcConfiguration";
-import { store } from "../shared/state";
+import { dispatch, subscribe, type ClientAction } from "../shared/state";
 import { randomHex } from "./randomHex";
 
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
@@ -28,68 +28,75 @@ const webSocket = createWebSocket(
 const peerConnection = createPeerConnection();
 negotiate(webSocket, peerConnection, { RTCSessionDescription });
 
-const localId = randomHex();
-const dataChannel = peerConnection.createDataChannel(localId, {
+const clientId = randomHex();
+const dataChannel = peerConnection.createDataChannel(clientId, {
   ordered: false,
   maxRetransmits: 0,
 });
+
+const dataChannelCtx = Evt.newCtx();
 
 Evt.merge([
   Evt.from<Event>(dataChannel, "error"),
   Evt.from<Event>(dataChannel, "close"),
 ]).attach(({ type }) => {
   console.log("dataChannel", type);
+  dataChannelCtx.done();
   // negotiate again?
 });
 
-Evt.from<Event>(dataChannel, "open").attach(() => {
-  const pointers = new Map<string, { x: number; y: number }>();
-  Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) => {
-    const { id, x, y } = JSON.parse(data);
-    pointers.set(id, { x, y });
-    console.log({ id, x, y });
-  });
+let actionId = 0;
+const createClientAction = (
+  type: string,
+  payload?: any
+): ClientAction<any> => ({
+  source: "client",
+  type,
+  payload: {
+    ...payload,
+    clientNow: Date.now(),
+    clientActionId: actionId++,
+    clientId,
+  },
+});
 
-  Evt.from<PointerEvent>(window, "pointermove").attach(({ x, y }) => {
-    dataChannel.send(JSON.stringify({ id: localId, x, y }));
-    pointers.set(localId, { x, y });
-  });
+const throwError = (message: string) => {
+  throw new Error(message);
+};
 
-  const { requestAnimationFrame: raf } = window;
-  const { PI: π } = Math;
-  const ππ = π * 2;
+const el = <T extends Element>(selectors: string) =>
+  document.querySelector<T>(selectors) ??
+  throwError(`No element found for ${selectors}`);
 
-  const throwError = (message: string) => {
-    throw new Error(message);
-  };
+const canvas = el<HTMLCanvasElement>("canvas");
+const context = canvas.getContext("2d") ?? throwError("No context");
 
-  const el = <T extends Element>(selector: string) =>
-    document.querySelector<T>(selector) ??
-    throwError(`No element found for selector: ${selector}`);
+subscribe(({ clients }) => {
+  console.log(JSON.stringify(clients, null, 2));
+});
 
-  const canvas = el<HTMLCanvasElement>("canvas");
-  const ctx = canvas.getContext("2d") ?? throwError("No canvas context");
+Evt.from<Event>(dataChannelCtx, dataChannel, "open").attach(() => {
+  const action = createClientAction("dataChannel:open");
+  dataChannel.send(JSON.stringify(action));
+  dispatch(action);
 
-  Evt.from<UIEvent>(window, "resize").attach(() => {
-    const { innerWidth, innerHeight } = window;
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
-  });
-  window.dispatchEvent(new UIEvent("resize"));
+  Evt.from<MessageEvent>(dataChannelCtx, dataChannel, "message").attach(
+    ({ data }) => dispatch(JSON.parse(data))
+  );
 
-  const draw = () => {
-    raf(draw);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    pointers.forEach(({ x, y }, id) => {
-      ctx.beginPath();
-      ctx.ellipse(x, y, 10, 10, 0, 0, ππ);
-      ctx.fillStyle = `#${id}`;
-      ctx.fill();
-    });
-  };
-
-  raf(draw);
+  // Evt.merge([
+  //   Evt.from<PointerEvent>(document, "pointerenter"),
+  //   Evt.from<PointerEvent>(document, "pointerover"),
+  // ]).attach(({ pointerId, pointerType, x, y }) => {
+  //   const action = createClientAction("pointerenterover", {
+  //     pointerId,
+  //     pointerType,
+  //     x,
+  //     y,
+  //   });
+  //   dataChannel.send(JSON.stringify(action));
+  //   dispatch(action);
+  // });
 });
 
 /**
