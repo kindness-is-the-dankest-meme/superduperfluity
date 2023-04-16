@@ -1,3 +1,4 @@
+import { current } from "immer";
 import { redux } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import { createStore } from "zustand/vanilla";
@@ -27,30 +28,23 @@ export type ServerAction<P extends any> = {
 
 type Action<P extends any = any> = ClientAction<P> | ServerAction<P>;
 
-type Reducer<S extends any = any, A extends Action = Action> = (
+type ImmerReducer<S extends any = any, A extends Action = Action> = (
   state: S,
   action: A
-) => S;
+) => void;
 
 type ReducerDecorator<S extends any = any, A extends Action = Action> = (
-  reducer: Reducer<S, A>
-) => Reducer<S, A>;
+  reducer: ImmerReducer<S, A>
+) => ImmerReducer<S, A>;
 
-const reducer: Reducer = (state, action) => {
+const reducer: ImmerReducer = (state, action) => {
   switch (action.type) {
     case "dataChannel:open":
-      // state.clients[action.payload.clientId] = {};
-      // return state;
-      return {
-        ...state,
-        clients: {
-          ...state.clients,
-          [action.payload.clientId]: {},
-        },
-      };
+      state.clients[action.payload.clientId] = {};
+      break;
 
     default:
-      return state;
+      return;
   }
 };
 
@@ -58,7 +52,7 @@ const isEqual = (a: Action<any>, b: Action<any>) =>
   a.type === b.type && a.payload.clientActionId === b.payload.clientActionId;
 
 const withRollback: ReducerDecorator = <S extends any, A extends Action>(
-  reducer: Reducer<S, A>
+  reducer: ImmerReducer<S, A>
 ) => {
   let settledState: any = initialState;
   const settledActions: ServerAction<any>[] = [];
@@ -67,12 +61,17 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
   return (state, action) => {
     if (action.source === "client") {
       pendingActions.push(action);
-      return reducer(state, action as any);
+      reducer(state, action as any);
     }
 
     if (action.source === "server") {
+      // not 100% sure we actually need this
       settledActions.push(action);
-      settledState = reducer(settledState, action as any);
+
+      // overwrite the current state with the settled state
+      reducer(Object.assign(state, settledState), action as any);
+      // stash the settled state, we're about to reapply pending actions
+      settledState = current(state);
 
       const settlingAction = pendingActions.find((pendingAction) =>
         isEqual(action, pendingAction)
@@ -85,14 +84,12 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
         // does the server action invalidate any of our pending actions?
       }
 
-      return pendingActions.reduce(
+      pendingActions.reduce(
         (pendingState, pendingAction) =>
           reducer(pendingState, pendingAction as any),
-        settledState
+        state
       );
     }
-
-    return reducer(state, action);
   };
 };
 
