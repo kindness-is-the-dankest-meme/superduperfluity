@@ -39,8 +39,22 @@ type ReducerDecorator<S extends any = any, A extends Action = Action> = (
 
 const reducer: ImmerReducer = (state, action) => {
   switch (action.type) {
-    case "dataChannel:open":
+    case "sync":
+      const {
+        serverNow: _a,
+        serverActionId: _b,
+        ...nextState
+      } = action.payload;
+      Object.assign(state, nextState);
+      break;
+
+    case "open":
       state.clients[action.payload.clientId] = {};
+      break;
+
+    case "close":
+    case "error":
+      delete state.clients[action.payload.clientId];
       break;
 
     default:
@@ -65,14 +79,17 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
     }
 
     if (action.source === "server") {
-      // not 100% sure we actually need this
+      // not 100% sure we actually need to keep these around, but it might be
+      // useful for debugging
       settledActions.push(action);
 
       // overwrite the current state with the settled state
       reducer(Object.assign(state, settledState), action as any);
+
       // stash the settled state, we're about to reapply pending actions
       settledState = current(state);
 
+      // check if the action represensts a resolution of a pending action
       const settlingAction = pendingActions.find((pendingAction) =>
         isEqual(action, pendingAction)
       );
@@ -84,6 +101,7 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
         // does the server action invalidate any of our pending actions?
       }
 
+      // reapply pending actions
       pendingActions.reduce(
         (pendingState, pendingAction) =>
           reducer(pendingState, pendingAction as any),

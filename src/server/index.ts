@@ -6,7 +6,7 @@ import { WebSocket, WebSocketServer } from "ws";
 import { isOpen } from "../shared/isOpen.js";
 import { negotiate } from "../shared/negotiate.js";
 import { rtcConfiguration } from "../shared/rtcConfiguration.js";
-import { dispatch, type ServerAction } from "../shared/state.js";
+import { dispatch, getState, type ServerAction } from "../shared/state.js";
 
 const server = createServer();
 const socketServer = new WebSocketServer({ server });
@@ -14,7 +14,8 @@ const socketServer = new WebSocketServer({ server });
 const { RTCPeerConnection, RTCSessionDescription } = wrtc;
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
-const channels = new Map<string, RTCDataChannel>();
+const actionChannels = new Map<string, RTCDataChannel>();
+const stateChannels = new Map<string, RTCDataChannel>();
 
 let actionId = 0;
 const createServerAction = (
@@ -40,30 +41,66 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
   });
 
   Evt.from<RTCDataChannelEvent>(peerConnection, "datachannel").attach(
-    ({ channel }) => {
-      console.log("datachannel", channel.label, channel.readyState);
+    ({ type, channel }) => {
+      console.log(type, channel.label, channel.readyState);
 
       const dataChannelCtx = Evt.newCtx();
-      channels.set(channel.label, channel);
 
-      Evt.merge([
-        Evt.from<Event>(dataChannelCtx, channel, "close"),
-        Evt.from<Event>(dataChannelCtx, channel, "error"),
-      ]).attachOnce(() => {
-        channels.delete(channel.label);
-        dataChannelCtx.done();
-      });
+      if (channel.label.startsWith("action:")) {
+        actionChannels.set(channel.label, channel);
 
-      Evt.from<MessageEvent>(dataChannelCtx, channel, "message").attach(
-        ({ data }) => {
-          const { type, payload } = JSON.parse(data);
+        Evt.merge(dataChannelCtx, [
+          Evt.from<Event>(channel, "close"),
+          Evt.from<Event>(channel, "error"),
+        ]).attachOnce(({ type }) => {
+          actionChannels.delete(channel.label);
 
-          const action = createServerAction(type, payload);
+          const action = createServerAction(type, {
+            clientId: channel.label.replace("action:", ""),
+          });
           dispatch(action);
 
-          channels.forEach((c) => c.send(JSON.stringify(action)));
-        }
-      );
+          actionChannels.forEach((c) => c.send(JSON.stringify(action)));
+
+          stateChannels
+            .get(channel.label.replace("action:", "state:"))
+            ?.close();
+
+          dataChannelCtx.done();
+        });
+
+        Evt.from<MessageEvent>(dataChannelCtx, channel, "message").attach(
+          ({ data }) => {
+            const { type, payload } = JSON.parse(data);
+
+            const action = createServerAction(type, payload);
+            dispatch(action);
+
+            actionChannels.forEach((c) => c.send(JSON.stringify(action)));
+          }
+        );
+      }
+
+      if (channel.label.startsWith("state:")) {
+        channel.send(JSON.stringify(createServerAction("sync", getState())));
+
+        Evt.merge(dataChannelCtx, [
+          Evt.from<Event>(channel, "close"),
+          Evt.from<Event>(channel, "error"),
+        ]).attachOnce(() => {
+          stateChannels.delete(channel.label);
+
+          actionChannels
+            .get(channel.label.replace("state:", "action:"))
+            ?.close();
+
+          dataChannelCtx.done();
+        });
+
+        Evt.from<MessageEvent>(dataChannelCtx, channel, "message").attach(() =>
+          channel.send(JSON.stringify(createServerAction("sync", getState())))
+        );
+      }
     }
   );
 });

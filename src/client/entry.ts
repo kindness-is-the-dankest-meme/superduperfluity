@@ -29,18 +29,32 @@ const peerConnection = createPeerConnection();
 negotiate(webSocket, peerConnection, { RTCSessionDescription });
 
 const clientId = randomHex();
-const dataChannel = peerConnection.createDataChannel(clientId, {
+const actionChannel = peerConnection.createDataChannel(`action:${clientId}`, {
   ordered: false,
   maxRetransmits: 0,
 });
+const stateChannel = peerConnection.createDataChannel(
+  `state:${clientId}` /* , {
+  // these are the default values
+  ordered: true,
+  maxRetransmits: null,
+} */
+);
 
 const dataChannelCtx = Evt.newCtx();
 
-Evt.merge([
-  Evt.from<Event>(dataChannel, "error"),
-  Evt.from<Event>(dataChannel, "close"),
-]).attach(({ type }) => {
-  console.log("dataChannel", type);
+Evt.from<Event>(window, "unload").attachOnce(() => {
+  actionChannel.close();
+  stateChannel.close();
+});
+
+Evt.merge(dataChannelCtx, [
+  Evt.from<Event>(actionChannel, "error"),
+  Evt.from<Event>(actionChannel, "close"),
+  Evt.from<Event>(stateChannel, "error"),
+  Evt.from<Event>(stateChannel, "close"),
+]).attach(({ target, type }) => {
+  console.log((target as RTCDataChannel).label, type);
   dataChannelCtx.done();
   // negotiate again?
 });
@@ -75,14 +89,24 @@ subscribe(({ clients }) => {
   console.log(JSON.stringify(clients, null, 2));
 });
 
-Evt.from<Event>(dataChannelCtx, dataChannel, "open").attach(() => {
-  const action = createClientAction("dataChannel:open");
-  dataChannel.send(JSON.stringify(action));
+Evt.merge(dataChannelCtx, [
+  Evt.from<Event>(actionChannel, "open"),
+  Evt.from<Event>(stateChannel, "open"),
+]).attach(() => {
+  if (
+    !(actionChannel.readyState === "open" && stateChannel.readyState === "open")
+  ) {
+    return;
+  }
+
+  const action = createClientAction("open");
+  actionChannel.send(JSON.stringify(action));
   dispatch(action);
 
-  Evt.from<MessageEvent>(dataChannelCtx, dataChannel, "message").attach(
-    ({ data }) => dispatch(JSON.parse(data))
-  );
+  Evt.merge(dataChannelCtx, [
+    Evt.from<MessageEvent>(actionChannel, "message"),
+    Evt.from<MessageEvent>(stateChannel, "message"),
+  ]).attach(({ data }) => dispatch(JSON.parse(data)));
 
   // Evt.merge([
   //   Evt.from<PointerEvent>(document, "pointerenter"),
