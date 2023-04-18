@@ -82,6 +82,8 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
       }
 
       if (channel.label.startsWith("state:")) {
+        stateChannels.set(channel.label, channel);
+
         channel.send(
           JSON.stringify({
             source: "server",
