@@ -108,19 +108,51 @@ Evt.merge(dataChannelCtx, [
     Evt.from<MessageEvent>(stateChannel, "message"),
   ]).attach(({ data }) => dispatch(JSON.parse(data)));
 
-  // Evt.merge([
-  //   Evt.from<PointerEvent>(document, "pointerenter"),
-  //   Evt.from<PointerEvent>(document, "pointerover"),
-  // ]).attach(({ pointerId, pointerType, x, y }) => {
-  //   const action = createClientAction("pointerenterover", {
-  //     pointerId,
-  //     pointerType,
-  //     x,
-  //     y,
-  //   });
-  //   dataChannel.send(JSON.stringify(action));
-  //   dispatch(action);
-  // });
+  Evt.merge([
+    Evt.from<PointerEvent>(document, "pointerenter"),
+    Evt.from<PointerEvent>(document, "pointerover"),
+  ]).attach(({ buttons, pointerId, pointerType, x, y }) => {
+    const action = createClientAction("pointerstart", {
+      pointerId,
+      pointerType,
+      isDown:
+        (pointerType === "mouse" && buttons !== 0) ||
+        pointerType === "touch" ||
+        pointerType === "pen",
+      x,
+      y,
+    });
+    actionChannel.send(JSON.stringify(action));
+    dispatch(action);
+  });
+
+  Evt.merge([
+    Evt.from<PointerEvent>(document, "pointerleave"),
+    Evt.from<PointerEvent>(document, "pointerout"),
+  ]).attach(({ pointerId }) => {
+    const action = createClientAction("pointerend", {
+      pointerId,
+    });
+    actionChannel.send(JSON.stringify(action));
+    dispatch(action);
+  });
+
+  Evt.from<PointerEvent>(document, "pointermove").attach(
+    ({ buttons, pointerId, pointerType, x, y }) => {
+      const action = createClientAction("pointermove", {
+        pointerId,
+        pointerType,
+        isDown:
+          (pointerType === "mouse" && buttons !== 0) ||
+          pointerType === "touch" ||
+          pointerType === "pen",
+        x,
+        y,
+      });
+      actionChannel.send(JSON.stringify(action));
+      dispatch(action);
+    }
+  );
 });
 
 /**

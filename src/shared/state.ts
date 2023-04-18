@@ -37,16 +37,60 @@ type ReducerDecorator<S extends any = any, A extends Action = Action> = (
   reducer: ImmerReducer<S, A>
 ) => ImmerReducer<S, A>;
 
-const reducer: ImmerReducer = (state, action) => {
-  switch (action.type) {
-    case "open":
-      state.clients[action.payload.clientId] = {};
+const reducer: ImmerReducer = (state, { type, payload }) => {
+  const { clientId } = payload;
+
+  switch (type) {
+    case "open": {
+      state.clients[clientId] = {
+        pointers: {},
+      };
       break;
+    }
 
     case "close":
-    case "error":
-      delete state.clients[action.payload.clientId];
+    case "error": {
+      delete state.clients[clientId];
       break;
+    }
+
+    case "pointerstart": {
+      const { pointerId, pointerType, isDown, x, y } = payload;
+
+      state.clients[clientId].pointers ||
+        (state.clients[clientId].pointers = {});
+
+      state.clients[clientId].pointers[pointerId] = {
+        pointerId,
+        pointerType,
+        isDown,
+        x,
+        y,
+      };
+      break;
+    }
+
+    case "pointerend": {
+      const { pointerId } = payload;
+      delete state.clients[clientId].pointers[pointerId];
+      break;
+    }
+
+    case "pointermove": {
+      const { pointerId, pointerType, isDown, x, y } = payload;
+
+      state.clients[clientId].pointers ||
+        (state.clients[clientId].pointers = {});
+
+      state.clients[clientId].pointers[pointerId] = {
+        pointerId,
+        pointerType,
+        isDown,
+        x,
+        y,
+      };
+      break;
+    }
 
     default:
       return;
