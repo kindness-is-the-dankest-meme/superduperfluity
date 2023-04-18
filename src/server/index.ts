@@ -58,8 +58,8 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
           const action = createServerAction(type, {
             clientId: channel.label.replace("action:", ""),
           });
-          dispatch(action);
 
+          dispatch(action);
           actionChannels.forEach((c) => c.send(JSON.stringify(action)));
 
           stateChannels
@@ -82,7 +82,13 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
       }
 
       if (channel.label.startsWith("state:")) {
-        channel.send(JSON.stringify(createServerAction("sync", getState())));
+        channel.send(
+          JSON.stringify({
+            source: "server",
+            type: "sync",
+            payload: getState(),
+          })
+        );
 
         Evt.merge(dataChannelCtx, [
           Evt.from<Event>(channel, "close"),
@@ -98,7 +104,13 @@ Evt.from<WebSocket>(socketServer, "connection").attach(async (webSocket) => {
         });
 
         Evt.from<MessageEvent>(dataChannelCtx, channel, "message").attach(() =>
-          channel.send(JSON.stringify(createServerAction("sync", getState())))
+          channel.send(
+            JSON.stringify({
+              source: "server",
+              type: "sync",
+              payload: getState(),
+            })
+          )
         );
       }
     }

@@ -39,15 +39,6 @@ type ReducerDecorator<S extends any = any, A extends Action = Action> = (
 
 const reducer: ImmerReducer = (state, action) => {
   switch (action.type) {
-    case "sync":
-      const {
-        serverNow: _a,
-        serverActionId: _b,
-        ...nextState
-      } = action.payload;
-      Object.assign(state, nextState);
-      break;
-
     case "open":
       state.clients[action.payload.clientId] = {};
       break;
@@ -79,27 +70,31 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
     }
 
     if (action.source === "server") {
-      // not 100% sure we actually need to keep these around, but it might be
-      // useful for debugging
-      settledActions.push(action);
+      if (action.type === "sync") {
+        Object.assign(state, action.payload);
+      } else {
+        // not 100% sure we actually need to keep these around, but it might be
+        // useful for debugging
+        settledActions.push(action);
 
-      // overwrite the current state with the settled state
-      reducer(Object.assign(state, settledState), action as any);
+        // overwrite state with the settled state and apply the action
+        reducer(Object.assign(state, settledState), action as any);
+
+        // check if the action represensts a resolution of a pending action
+        const settlingAction = pendingActions.find((pendingAction) =>
+          isEqual(action, pendingAction)
+        );
+
+        if (settlingAction) {
+          // we found a match, the action is now settled, remove it from pending
+          pendingActions.splice(pendingActions.indexOf(settlingAction), 1);
+        } else {
+          // does the server action invalidate any of our pending actions?
+        }
+      }
 
       // stash the settled state, we're about to reapply pending actions
       settledState = current(state);
-
-      // check if the action represensts a resolution of a pending action
-      const settlingAction = pendingActions.find((pendingAction) =>
-        isEqual(action, pendingAction)
-      );
-
-      if (settlingAction) {
-        // we found a match, the action is now settled, remove it from pending
-        pendingActions.splice(pendingActions.indexOf(settlingAction), 1);
-      } else {
-        // does the server action invalidate any of our pending actions?
-      }
 
       // reapply pending actions
       pendingActions.reduce(
