@@ -54,7 +54,8 @@ const reducer: ImmerReducer = (state, { type, payload }) => {
       break;
     }
 
-    case "pointerstart": {
+    case "pointerstart":
+    case "pointermove": {
       const { pointerId, pointerType, isDown, x, y } = payload;
 
       state.clients[clientId].pointers ||
@@ -76,25 +77,13 @@ const reducer: ImmerReducer = (state, { type, payload }) => {
       break;
     }
 
-    case "pointermove": {
-      const { pointerId, pointerType, isDown, x, y } = payload;
-
-      state.clients[clientId].pointers ||
-        (state.clients[clientId].pointers = {});
-
-      state.clients[clientId].pointers[pointerId] = {
-        pointerId,
-        pointerType,
-        isDown,
-        x,
-        y,
-      };
-      break;
-    }
-
     default:
       return;
   }
+};
+
+const initialState = {
+  clients: {},
 };
 
 const isEqual = (a: Action<any>, b: Action<any>) =>
@@ -146,10 +135,6 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
       );
     }
   };
-};
-
-const initialState = {
-  clients: {},
 };
 
 export const { dispatch, getState, subscribe } = createStore(

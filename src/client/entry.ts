@@ -151,9 +151,9 @@ Evt.merge(dataChannelCtx, [
   );
 });
 
-// subscribe(({ clients }) => {
-//   console.log(JSON.stringify(clients, null, 2));
-// });
+subscribe(({ clients }) => {
+  console.log(JSON.stringify(clients, null, 2));
+});
 
 const throwError = (message: string) => {
   throw new Error(message);
