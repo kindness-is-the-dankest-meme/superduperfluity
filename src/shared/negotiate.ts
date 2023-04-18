@@ -1,26 +1,11 @@
 import { Evt } from "evt";
+import type { WebSocketish } from "./types.js";
 
-interface WebSocketishEventMap {
-  message: Pick<MessageEvent, "data" | "type">;
-  open: Pick<Event, "type">;
-}
-
-interface WebSocketish extends Pick<WebSocket, "readyState" | "OPEN"> {
-  send(data: string): void;
-  addEventListener<K extends keyof WebSocketishEventMap>(
-    type: K,
-    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
-  ): void;
-  removeEventListener<K extends keyof WebSocketishEventMap>(
-    type: K,
-    listener: (this: WebSocketish, event: WebSocketishEventMap[K]) => any
-  ): void;
-}
-
-const isPolite = "process" in globalThis;
+const isServer = "process" in globalThis;
+const isDebug = false;
 
 export const negotiate = async (
-  [webSocket, ready]: [WebSocketish, Promise<true>],
+  webSocket: WebSocketish,
   peerConnection: RTCPeerConnection,
   {
     RTCSessionDescription,
@@ -33,25 +18,26 @@ export const negotiate = async (
   Evt.merge([
     Evt.from<Event>(peerConnection, "connectionstatechange"),
     Evt.from<Event>(peerConnection, "signallingstatechange"),
-  ]).attach((event) =>
-    console.log(
-      event.type,
-      peerConnection.signalingState,
-      peerConnection.connectionState
-    )
+  ]).attach(
+    (event) =>
+      isDebug &&
+      console.log(
+        event.type,
+        peerConnection.signalingState,
+        peerConnection.connectionState
+      )
   );
 
   Evt.from<Event>(peerConnection, "negotiationneeded").attach(async () => {
-    console.log("negotiationneeded");
+    isDebug && console.log("negotiationneeded");
 
     try {
       isOffering = true;
 
       const offer = await peerConnection.createOffer();
-      await Promise.all([
-        peerConnection.setLocalDescription(new RTCSessionDescription(offer)),
-        ready,
-      ]);
+      await peerConnection.setLocalDescription(
+        new RTCSessionDescription(offer)
+      );
 
       webSocket.send(
         JSON.stringify({ description: peerConnection.localDescription })
@@ -65,10 +51,9 @@ export const negotiate = async (
 
   Evt.from<RTCPeerConnectionIceEvent>(peerConnection, "icecandidate").attach(
     async ({ candidate }) => {
-      console.log("icecandidate", { candidate });
+      isDebug && console.log("icecandidate", { candidate });
       if (candidate === null) return;
 
-      await ready;
       webSocket.send(JSON.stringify({ candidate }));
     }
   );
@@ -77,7 +62,12 @@ export const negotiate = async (
     peerConnection,
     "iceconnectionstatechange"
   ).attach(() => {
-    console.log("iceconnectionstatechange", peerConnection.iceConnectionState);
+    isDebug &&
+      console.log(
+        "iceconnectionstatechange",
+        peerConnection.iceConnectionState
+      );
+
     if (peerConnection.iceConnectionState === "failed") {
       peerConnection.restartIce();
     }
@@ -85,15 +75,16 @@ export const negotiate = async (
 
   Evt.from<MessageEvent>(webSocket, "message").attach(
     async ({ type, data }) => {
-      console.log(
-        type,
-        peerConnection.signalingState,
-        peerConnection.connectionState
-      );
+      isDebug &&
+        console.log(
+          type,
+          peerConnection.signalingState,
+          peerConnection.connectionState
+        );
 
       try {
         const { candidate, description } = JSON.parse(data);
-        console.log({ candidate, description });
+        isDebug && console.log({ candidate, description });
 
         if (candidate) {
           await peerConnection.addIceCandidate(candidate);
@@ -104,19 +95,16 @@ export const negotiate = async (
 
           if (description.type === "offer") {
             if (
-              !isPolite &&
+              !isServer &&
               (isOffering || peerConnection.signalingState !== "stable")
             ) {
               return;
             }
 
             const answer = await peerConnection.createAnswer();
-            await Promise.all([
-              peerConnection.setLocalDescription(
-                new RTCSessionDescription(answer)
-              ),
-              ready,
-            ]);
+            await peerConnection.setLocalDescription(
+              new RTCSessionDescription(answer)
+            );
 
             webSocket.send(
               JSON.stringify({ description: peerConnection.localDescription })

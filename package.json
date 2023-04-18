@@ -14,7 +14,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev:client": "parcel --target client",
     "dev:server-watch": "tsc -b --watch --preserveWatchOutput",
-    "dev:server-restart": "nodemon dist/server/index.js",
+    "dev:server-restart": "nodemon",
     "dev": "concurrently \"npm:dev:*\"",
     "build:client": "parcel build --target client",
     "build:server": "tsc -b",
@@ -44,8 +44,10 @@
   "license": "MIT",
   "dependencies": {
     "evt": "^2.4.18",
+    "immer": "^9.0.21",
     "wrtc": "^0.4.7",
-    "ws": "^8.13.0"
+    "ws": "^8.13.0",
+    "zustand": "^4.3.7"
   },
   "devDependencies": {
     "@mapbox/node-pre-gyp": "^1.0.10",

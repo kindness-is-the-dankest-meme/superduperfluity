@@ -1,104 +1,229 @@
 import { Evt } from "evt";
 
+import { isOpen } from "../shared/isOpen";
 import { negotiate } from "../shared/negotiate";
-import { randomHex } from "../shared/randomHex";
+import { rtcConfiguration } from "../shared/rtcConfiguration";
+import {
+  dispatch,
+  subscribe,
+  type ClientAction,
+  getState,
+} from "../shared/state";
+import { randomHex } from "./randomHex";
 
-const createPeerConnection = () =>
-  new RTCPeerConnection({
-    iceServers: [
-      {
-        urls: [
-          "stun:stun.l.google.com:19302",
-          "stun:global.stun.twilio.com:3478",
-        ],
-      },
-    ],
-  });
+const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
 
-const createWebSocket = (
-  ...args: ConstructorParameters<typeof WebSocket>
-): [WebSocket, Promise<true>] => {
-  const webSocket = new WebSocket(...args);
-  const { readyState, OPEN } = webSocket;
-  return [
-    webSocket,
-    new Promise<true>((resolve) =>
-      readyState !== OPEN
-        ? Evt.from<Event>(webSocket, "open").attachOnce(() => resolve(true))
-        : resolve(true)
-    ),
-  ];
-};
+class SignalingSocket extends WebSocket {
+  async send(data: Parameters<WebSocket["send"]>["0"]) {
+    await isOpen(this);
+    super.send(data);
+  }
+}
+
+const createWebSocket = (...args: ConstructorParameters<typeof WebSocket>) =>
+  new SignalingSocket(...args);
 
 const { hostname, protocol } = location;
-const [webSocket, ready] = createWebSocket(
+const webSocket = createWebSocket(
   `${protocol.replace("http", "ws")}//${hostname}${
     process.env.NODE_ENV === "production" ? "/wrtc" : ":8080"
   }`
 );
-const peerConnection = createPeerConnection();
-negotiate([webSocket, ready], peerConnection, { RTCSessionDescription });
 
-const localId = randomHex();
-const dataChannel = peerConnection.createDataChannel(localId, {
+const peerConnection = createPeerConnection();
+negotiate(webSocket, peerConnection, { RTCSessionDescription });
+
+const clientId = randomHex();
+const actionChannel = peerConnection.createDataChannel(`action:${clientId}`, {
   ordered: false,
   maxRetransmits: 0,
 });
+const stateChannel = peerConnection.createDataChannel(
+  `state:${clientId}` /* , {
+  // these are the default values
+  ordered: true,
+  maxRetransmits: null,
+} */
+);
 
-Evt.merge([
-  Evt.from<Event>(dataChannel, "error"),
-  Evt.from<Event>(dataChannel, "close"),
-]).attach(({ type }) => {
-  console.log("dataChannel", type);
+const dataChannelCtx = Evt.newCtx();
+
+Evt.from<Event>(window, "unload").attachOnce(() => {
+  actionChannel.close();
+  stateChannel.close();
+});
+
+Evt.merge(dataChannelCtx, [
+  Evt.from<Event>(actionChannel, "error"),
+  Evt.from<Event>(actionChannel, "close"),
+  Evt.from<Event>(stateChannel, "error"),
+  Evt.from<Event>(stateChannel, "close"),
+]).attach(({ target, type }) => {
+  console.log((target as RTCDataChannel).label, type);
+  dataChannelCtx.done();
   // negotiate again?
 });
 
-Evt.from<Event>(dataChannel, "open").attach(() => {
-  const pointers = new Map<string, { x: number; y: number }>();
-  Evt.from<MessageEvent>(dataChannel, "message").attach(({ data }) => {
-    const { id, x, y } = JSON.parse(data);
-    pointers.set(id, { x, y });
-    console.log({ id, x, y });
-  });
-
-  Evt.from<PointerEvent>(window, "pointermove").attach(({ x, y }) => {
-    dataChannel.send(JSON.stringify({ id: localId, x, y }));
-    pointers.set(localId, { x, y });
-  });
-
-  const { requestAnimationFrame: raf } = window;
-  const { PI: π } = Math;
-  const ππ = π * 2;
-
-  const throwError = (message: string) => {
-    throw new Error(message);
-  };
-
-  const el = <T extends Element>(selector: string) =>
-    document.querySelector<T>(selector) ??
-    throwError(`No element found for selector: ${selector}`);
-
-  const canvas = el<HTMLCanvasElement>("canvas");
-  const ctx = canvas.getContext("2d") ?? throwError("No canvas context");
-
-  Evt.from<UIEvent>(window, "resize").attach(() => {
-    const { innerWidth, innerHeight } = window;
-    canvas.width = innerWidth;
-    canvas.height = innerHeight;
-  });
-  window.dispatchEvent(new UIEvent("resize"));
-
-  const draw = () => {
-    raf(draw);
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    pointers.forEach(({ x, y }, id) => {
-      ctx.beginPath();
-      ctx.ellipse(x, y, 10, 10, 0, 0, ππ);
-      ctx.fillStyle = `#${id}`;
-      ctx.fill();
-    });
-  };
-
-  raf(draw);
+let actionId = 0;
+const createClientAction = (
+  type: string,
+  payload?: any
+): ClientAction<any> => ({
+  source: "client",
+  type,
+  payload: {
+    ...payload,
+    clientNow: Date.now(),
+    clientActionId: actionId++,
+    clientId,
+  },
 });
+
+const sendClientAction = (type: string, payload?: any): void => {
+  const action = createClientAction(type, payload);
+  actionChannel.send(JSON.stringify(action));
+  dispatch(action);
+};
+
+Evt.merge(dataChannelCtx, [
+  Evt.from<Event>(actionChannel, "open"),
+  Evt.from<Event>(stateChannel, "open"),
+]).attach(() => {
+  if (
+    !(actionChannel.readyState === "open" && stateChannel.readyState === "open")
+  ) {
+    return;
+  }
+
+  sendClientAction("open");
+  Evt.merge(dataChannelCtx, [
+    Evt.from<MessageEvent>(actionChannel, "message"),
+    Evt.from<MessageEvent>(stateChannel, "message"),
+  ]).attach(({ data }) => dispatch(JSON.parse(data)));
+
+  Evt.merge([
+    Evt.from<PointerEvent>(document, "pointerenter"),
+    Evt.from<PointerEvent>(document, "pointerover"),
+    Evt.from<PointerEvent>(document, "pointerdown"),
+  ]).attach(({ buttons, pointerId, pointerType, x, y }) =>
+    sendClientAction("pointerstart", {
+      pointerId,
+      pointerType,
+      isDown:
+        (pointerType === "mouse" && buttons !== 0) ||
+        pointerType === "touch" ||
+        pointerType === "pen",
+      x: x - canvas.width / 2,
+      y: y - canvas.height / 2,
+    })
+  );
+
+  Evt.merge([
+    Evt.from<PointerEvent>(document, "pointerleave"),
+    Evt.from<PointerEvent>(document, "pointerout"),
+    Evt.from<PointerEvent>(document, "pointerup"),
+  ]).attach(({ type, buttons, pointerId, pointerType, x, y }) =>
+    type === "pointerup" && pointerType === "mouse"
+      ? sendClientAction("pointermove", {
+          pointerId,
+          pointerType,
+          isDown: buttons !== 0,
+          x: x - canvas.width / 2,
+          y: y - canvas.height / 2,
+        })
+      : sendClientAction("pointerend", {
+          pointerId,
+        })
+  );
+
+  Evt.from<PointerEvent>(document, "pointermove").attach(
+    ({ buttons, pointerId, pointerType, x, y }) =>
+      sendClientAction("pointermove", {
+        pointerId,
+        pointerType,
+        isDown:
+          (pointerType === "mouse" && buttons !== 0) ||
+          pointerType === "touch" ||
+          pointerType === "pen",
+        x: x - canvas.width / 2,
+        y: y - canvas.height / 2,
+      })
+  );
+});
+
+// subscribe(({ clients }) => {
+//   console.log(JSON.stringify(clients, null, 2));
+// });
+
+const throwError = (message: string) => {
+  throw new Error(message);
+};
+
+const el = <T extends Element>(selectors: string) =>
+  document.querySelector<T>(selectors) ??
+  throwError(`No element found for ${selectors}`);
+
+const canvas = el<HTMLCanvasElement>("canvas");
+const context = canvas.getContext("2d") ?? throwError("No context");
+
+Evt.from<UIEvent>(window, "resize").attach(() => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+window.dispatchEvent(new UIEvent("resize"));
+
+const draw = () => {
+  requestAnimationFrame(draw);
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  const { clients } = getState();
+  Object.entries<{ pointers: any }>(clients).forEach(
+    ([clientId, { pointers }]) =>
+      Object.values<{
+        pointerType: "mouse" | "pen" | "touch";
+        isDown: boolean;
+        x: number;
+        y: number;
+      }>(pointers).forEach(({ pointerType, isDown, x, y }) => {
+        context.save();
+        context.translate(canvas.width / 2 + x, canvas.height / 2 + y);
+        context.rotate(Math.PI / 3);
+
+        context.fillStyle = `#${clientId}`;
+
+        if (pointerType === "touch") {
+          context.beginPath();
+          context.ellipse(0, 0, 16, 16, 0, 0, Math.PI * 2);
+          context.fill();
+        } else {
+          context.font = `${isDown ? 48 : 32}px monospace`;
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.fillText(String.fromCharCode(0x2b05, 0xfe0e), 0, 0);
+        }
+
+        context.restore();
+      })
+  );
+};
+draw();
+
+/**
+ * - send input to data channel
+ * - send input to state (predictions)
+ * - input *from* data channel is "known good"
+ *   - current state is last known good state + known good input + predictions
+ *   - known good input that *is* a predicion drops the prediction
+ *   - invalid predictions are dropped during replay
+ *
+ * input messages have:
+ *   - timestamp
+ *   - input id
+ *   - client id
+ *
+ * - add a reliable sync channel
+ * - send initial state on open
+ * - trigger sync on desync
+ *   - naive: client request on skipped action ids
+ */
