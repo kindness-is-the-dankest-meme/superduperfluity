@@ -12,8 +12,11 @@
       canvas {
         width: 100%;
         height: 100%;
+      }
 
+      html {
         overscroll-behavior: none;
+        touch-action: none;
       }
 
       body {
@@ -34,7 +37,7 @@
         align-items: center;
 
         overflow: hidden;
-        /* cursor: none; */
+        cursor: none;
       }
 
       canvas {
@@ -45,6 +48,7 @@
 
       h1 {
         pointer-events: none;
+        user-select: none;
       }
     </style>
   </head>

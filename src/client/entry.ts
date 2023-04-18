@@ -3,7 +3,12 @@ import { Evt } from "evt";
 import { isOpen } from "../shared/isOpen";
 import { negotiate } from "../shared/negotiate";
 import { rtcConfiguration } from "../shared/rtcConfiguration";
-import { dispatch, subscribe, type ClientAction } from "../shared/state";
+import {
+  dispatch,
+  subscribe,
+  type ClientAction,
+  getState,
+} from "../shared/state";
 import { randomHex } from "./randomHex";
 
 const createPeerConnection = () => new RTCPeerConnection(rtcConfiguration);
@@ -74,20 +79,11 @@ const createClientAction = (
   },
 });
 
-const throwError = (message: string) => {
-  throw new Error(message);
+const sendClientAction = (type: string, payload?: any): void => {
+  const action = createClientAction(type, payload);
+  actionChannel.send(JSON.stringify(action));
+  dispatch(action);
 };
-
-const el = <T extends Element>(selectors: string) =>
-  document.querySelector<T>(selectors) ??
-  throwError(`No element found for ${selectors}`);
-
-const canvas = el<HTMLCanvasElement>("canvas");
-const context = canvas.getContext("2d") ?? throwError("No context");
-
-subscribe(({ clients }) => {
-  console.log(JSON.stringify(clients, null, 2));
-});
 
 Evt.merge(dataChannelCtx, [
   Evt.from<Event>(actionChannel, "open"),
@@ -99,10 +95,7 @@ Evt.merge(dataChannelCtx, [
     return;
   }
 
-  const action = createClientAction("open");
-  actionChannel.send(JSON.stringify(action));
-  dispatch(action);
-
+  sendClientAction("open");
   Evt.merge(dataChannelCtx, [
     Evt.from<MessageEvent>(actionChannel, "message"),
     Evt.from<MessageEvent>(stateChannel, "message"),
@@ -111,49 +104,110 @@ Evt.merge(dataChannelCtx, [
   Evt.merge([
     Evt.from<PointerEvent>(document, "pointerenter"),
     Evt.from<PointerEvent>(document, "pointerover"),
-  ]).attach(({ buttons, pointerId, pointerType, x, y }) => {
-    const action = createClientAction("pointerstart", {
+    Evt.from<PointerEvent>(document, "pointerdown"),
+  ]).attach(({ buttons, pointerId, pointerType, x, y }) =>
+    sendClientAction("pointerstart", {
       pointerId,
       pointerType,
       isDown:
         (pointerType === "mouse" && buttons !== 0) ||
         pointerType === "touch" ||
         pointerType === "pen",
-      x,
-      y,
-    });
-    actionChannel.send(JSON.stringify(action));
-    dispatch(action);
-  });
+      x: x - canvas.width / 2,
+      y: y - canvas.height / 2,
+    })
+  );
 
   Evt.merge([
     Evt.from<PointerEvent>(document, "pointerleave"),
     Evt.from<PointerEvent>(document, "pointerout"),
-  ]).attach(({ pointerId }) => {
-    const action = createClientAction("pointerend", {
-      pointerId,
-    });
-    actionChannel.send(JSON.stringify(action));
-    dispatch(action);
-  });
+    Evt.from<PointerEvent>(document, "pointerup"),
+  ]).attach(({ type, buttons, pointerId, pointerType, x, y }) =>
+    type === "pointerup" && pointerType === "mouse"
+      ? sendClientAction("pointermove", {
+          pointerId,
+          pointerType,
+          isDown: buttons !== 0,
+          x: x - canvas.width / 2,
+          y: y - canvas.height / 2,
+        })
+      : sendClientAction("pointerend", {
+          pointerId,
+        })
+  );
 
   Evt.from<PointerEvent>(document, "pointermove").attach(
-    ({ buttons, pointerId, pointerType, x, y }) => {
-      const action = createClientAction("pointermove", {
+    ({ buttons, pointerId, pointerType, x, y }) =>
+      sendClientAction("pointermove", {
         pointerId,
         pointerType,
         isDown:
           (pointerType === "mouse" && buttons !== 0) ||
           pointerType === "touch" ||
           pointerType === "pen",
-        x,
-        y,
-      });
-      actionChannel.send(JSON.stringify(action));
-      dispatch(action);
-    }
+        x: x - canvas.width / 2,
+        y: y - canvas.height / 2,
+      })
   );
 });
+
+// subscribe(({ clients }) => {
+//   console.log(JSON.stringify(clients, null, 2));
+// });
+
+const throwError = (message: string) => {
+  throw new Error(message);
+};
+
+const el = <T extends Element>(selectors: string) =>
+  document.querySelector<T>(selectors) ??
+  throwError(`No element found for ${selectors}`);
+
+const canvas = el<HTMLCanvasElement>("canvas");
+const context = canvas.getContext("2d") ?? throwError("No context");
+
+Evt.from<UIEvent>(window, "resize").attach(() => {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+});
+window.dispatchEvent(new UIEvent("resize"));
+
+const draw = () => {
+  requestAnimationFrame(draw);
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+
+  const { clients } = getState();
+  Object.entries<{ pointers: any }>(clients).forEach(
+    ([clientId, { pointers }]) =>
+      Object.values<{
+        pointerType: "mouse" | "pen" | "touch";
+        isDown: boolean;
+        x: number;
+        y: number;
+      }>(pointers).forEach(({ pointerType, isDown, x, y }) => {
+        context.save();
+        context.translate(canvas.width / 2 + x, canvas.height / 2 + y);
+        context.rotate(Math.PI / 3);
+
+        context.fillStyle = `#${clientId}`;
+
+        if (pointerType === "touch") {
+          context.beginPath();
+          context.ellipse(0, 0, 16, 16, 0, 0, Math.PI * 2);
+          context.fill();
+        } else {
+          context.font = `${isDown ? 48 : 32}px monospace`;
+          context.textAlign = "center";
+          context.textBaseline = "middle";
+          context.fillText(String.fromCharCode(0x2b05, 0xfe0e), 0, 0);
+        }
+
+        context.restore();
+      })
+  );
+};
+draw();
 
 /**
  * - send input to data channel

@@ -72,13 +72,16 @@ const reducer: ImmerReducer = (state, { type, payload }) => {
 
     case "pointerend": {
       const { pointerId } = payload;
-      delete state.clients[clientId].pointers[pointerId];
+      delete state.clients?.[clientId]?.pointers?.[pointerId];
       break;
     }
 
     case "pointermove": {
       const { pointerId, pointerType, isDown, x, y } = payload;
 
+      if (state === undefined) {
+        console.log(clientId, state);
+      }
       state.clients[clientId].pointers ||
         (state.clients[clientId].pointers = {});
 
@@ -141,10 +144,8 @@ const withRollback: ReducerDecorator = <S extends any, A extends Action>(
       settledState = current(state);
 
       // reapply pending actions
-      pendingActions.reduce(
-        (pendingState, pendingAction) =>
-          reducer(pendingState, pendingAction as any),
-        state
+      pendingActions.forEach((pendingAction) =>
+        reducer(state, pendingAction as any)
       );
     }
   };
