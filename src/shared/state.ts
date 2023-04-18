@@ -72,16 +72,13 @@ const reducer: ImmerReducer = (state, { type, payload }) => {
 
     case "pointerend": {
       const { pointerId } = payload;
-      delete state.clients?.[clientId]?.pointers?.[pointerId];
+      delete state.clients[clientId].pointers[pointerId];
       break;
     }
 
     case "pointermove": {
       const { pointerId, pointerType, isDown, x, y } = payload;
 
-      if (state === undefined) {
-        console.log(clientId, state);
-      }
       state.clients[clientId].pointers ||
         (state.clients[clientId].pointers = {});
 
