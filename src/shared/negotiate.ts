@@ -28,6 +28,9 @@ export const negotiate = async (
       )
   );
 
+  /**
+   * 3. this always starts on the client, and the server accepts all offers
+   */
   Evt.from<Event>(peerConnection, "negotiationneeded").attach(async () => {
     isDebug && console.log("negotiationneeded");
 
@@ -49,6 +52,11 @@ export const negotiate = async (
     }
   });
 
+  /**
+   * 4. ice candidates still feel a little like magic to me, but the peer
+   *    connection talks to the STUN server to get these and we just need to
+   *    forward them to the other peer via the signaling channel (web socket)
+   */
   Evt.from<RTCPeerConnectionIceEvent>(peerConnection, "icecandidate").attach(
     async ({ candidate }) => {
       isDebug && console.log("icecandidate", { candidate });
@@ -73,6 +81,10 @@ export const negotiate = async (
     }
   });
 
+  /**
+   * 5. the signalling channel handles candidates and descriptions (offers and
+   *    answers) for both client and server
+   */
   Evt.from<MessageEvent>(webSocket, "message").attach(
     async ({ type, data }) => {
       isDebug &&

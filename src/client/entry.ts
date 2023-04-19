@@ -23,6 +23,10 @@ class SignalingSocket extends WebSocket {
 const createWebSocket = (...args: ConstructorParameters<typeof WebSocket>) =>
   new SignalingSocket(...args);
 
+/**
+ * 1. create the web socket (as signaling channel) and peer connection,
+ *    negotiate wires up the necessary event listeners to handle negotiation
+ */
 const { hostname, protocol } = location;
 const webSocket = createWebSocket(
   `${protocol.replace("http", "ws")}//${hostname}${
@@ -33,6 +37,10 @@ const webSocket = createWebSocket(
 const peerConnection = createPeerConnection();
 negotiate(webSocket, peerConnection, { RTCSessionDescription });
 
+/**
+ * 2. creating the data channels kicks off the 'negotiationneeded' event, only
+ *    the client ever calls/makes connection offers
+ */
 const clientId = randomHex();
 const actionChannel = peerConnection.createDataChannel(`action:${clientId}`, {
   ordered: false,
@@ -79,6 +87,10 @@ const createClientAction = (
   },
 });
 
+/**
+ * 7. client actions are immediately dispatched to the store, and sent to the
+ *    server (via the unordered, unreliable data channel)
+ */
 const sendClientAction = (type: string, payload?: any): void => {
   const action = createClientAction(type, payload);
   actionChannel.send(JSON.stringify(action));
@@ -95,7 +107,16 @@ Evt.merge(dataChannelCtx, [
     return;
   }
 
+  /**
+   * 6. negotiation is complete, our data channels are open and we can start the
+   *    state synchronization
+   */
   sendClientAction("open");
+
+  /**
+   * 8. messages from the server (either actions or state/sync) are dispatched
+   *    to the local store
+   */
   Evt.merge(dataChannelCtx, [
     Evt.from<MessageEvent>(actionChannel, "message"),
     Evt.from<MessageEvent>(stateChannel, "message"),

@@ -33,10 +33,15 @@ type ImmerReducer<S extends any = any, A extends Action = Action> = (
   action: A
 ) => void;
 
-type ReducerDecorator<S extends any = any, A extends Action = Action> = (
+type ReducerEnhancer<S extends any = any, A extends Action = Action> = (
   reducer: ImmerReducer<S, A>
 ) => ImmerReducer<S, A>;
 
+/**
+ * 9. this reducer is an Immer reducer (mutations within the reducer are
+ *    "flushed" when the function returns) ... other than that this should be
+ *    familiar to anyone who's worked with React or Redux
+ */
 const reducer: ImmerReducer = (state, { type, payload }) => {
   const { clientId } = payload;
 
@@ -89,7 +94,11 @@ const initialState = {
 const isEqual = (a: Action<any>, b: Action<any>) =>
   a.type === b.type && a.payload.clientActionId === b.payload.clientActionId;
 
-const withRollback: ReducerDecorator = <S extends any, A extends Action>(
+/**
+ * 10. this reeducer enhancer is heavily based on the undo/redo reducer enhancer
+ *     from Redux's own documentation
+ */
+const withRollback: ReducerEnhancer = <S extends any, A extends Action>(
   reducer: ImmerReducer<S, A>
 ) => {
   let settledState: any = initialState;
